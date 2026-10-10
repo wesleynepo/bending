@@ -1,0 +1,9 @@
+# Bend build outputs
+hello
+hello.gpu
+server
+server.gpu
+redis/demo
+redis/demo.gpu
+*.bendtt
+.DS_Store
