@@ -1,14 +1,16 @@
 import http from 'k6/http';
 import { check } from 'k6';
 
-// Load test for server.bend (GET /<key> -> Redis lookup).
+// Load test for server.bend (GET /people/{id} through the Redis cache, then Postgres on a miss).
 //
-// Seed the key first:   redis-cli SET greeting hello
+// setup() creates one person (POST /people); the iterations read it (200) and look up a
+// random uuid that does not exist (404); teardown() deletes the person.
+// Start the stack first (docker compose up -d) and the server (bend server.bend).
 // Run:                  k6 run load/k6.js
-// Override the target:  k6 run -e BASE_URL=http://host:8080 -e KEY=greeting load/k6.js
+// Override the target:  k6 run -e BASE_URL=http://host:8080 load/k6.js
 
 const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:8080';
-const KEY = __ENV.KEY || 'greeting';
+const JSON_HEADERS = { 'Content-Type': 'application/json', Connection: 'close' };
 
 export const options = {
   scenarios: {
@@ -35,25 +37,44 @@ export const options = {
   },
 };
 
-export default function () {
+// A random uuid-shaped string; the server answers 404 for any id it does not store.
+function randomId() {
+  return 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () =>
+    Math.floor(Math.random() * 16).toString(16));
+}
+
+export function setup() {
+  const body = JSON.stringify({ name: 'load-test', birthdate: '1990-06-15' });
+  const res = http.post(`${BASE_URL}/people`, body, { headers: JSON_HEADERS });
+  if (res.status !== 201) {
+    throw new Error(`setup: POST /people returned ${res.status}`);
+  }
+  return { id: res.json('id') };
+}
+
+export default function (data) {
   // The server closes each connection, so don't try to reuse it.
-  // A 404 is the expected answer for a missing key, so don't count it as a failure.
+  // A 404 is the expected answer for an unknown id, so don't count it as a failure.
   const params = {
     headers: { Connection: 'close' },
     responseCallback: http.expectedStatuses(200, 404),
   };
 
-  // Alternate between a key that exists and one that doesn't.
+  // Alternate between the person created in setup() and an id that doesn't exist.
   if (__ITER % 2 === 0) {
-    const hit = http.get(`${BASE_URL}/${KEY}`, params);
+    const hit = http.get(`${BASE_URL}/people/${data.id}`, params);
     check(hit, {
       'hit: status 200': (r) => r.status === 200,
-      'hit: JSON body': (r) => r.json('key') === KEY,
+      'hit: JSON body': (r) => r.json('id') === data.id,
     });
   } else {
-    const miss = http.get(`${BASE_URL}/does-not-exist`, params);
+    const miss = http.get(`${BASE_URL}/people/${randomId()}`, params);
     check(miss, {
       'miss: status 404': (r) => r.status === 404,
     });
   }
+}
+
+export function teardown(data) {
+  http.del(`${BASE_URL}/people/${data.id}`, null, { headers: { Connection: 'close' } });
 }

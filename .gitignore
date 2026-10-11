@@ -7,3 +7,5 @@ redis/demo
 redis/demo.gpu
 *.bendtt
 .DS_Store
+pg/demo
+pg/demo.gpu

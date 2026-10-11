@@ -1,0 +1,259 @@
+openapi: 3.0.3
+info:
+  title: People API
+  version: 1.0.0
+  description: >
+    JSON API for managing people. Every response is JSON. Errors always have the
+    shape {"error": "<message>"}. The server speaks HTTP/1.1 and closes every
+    connection (Connection: close).
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local development server
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+  /people:
+    get:
+      summary: List people
+      description: Ordered by name, then id.
+      operationId: listPeople
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of people to return. Values above 200 are clamped to 200.
+          schema:
+            type: integer
+            minimum: 0
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          description: Number of people to skip.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Page of people
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Person"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      summary: Create a person
+      operationId: createPerson
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewPerson"
+      responses:
+        "201":
+          description: Person created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /people/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PersonId"
+    get:
+      summary: Get a person
+      operationId: getPerson
+      responses:
+        "200":
+          description: The person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      summary: Replace a person's name and birthdate
+      operationId: updatePerson
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewPerson"
+      responses:
+        "200":
+          description: Updated person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      summary: Delete a person
+      operationId: deletePerson
+      responses:
+        "204":
+          description: Person deleted; empty body
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "500":
+          $ref: "#/components/responses/InternalError"
+components:
+  parameters:
+    PersonId:
+      name: id
+      in: path
+      required: true
+      description: Canonical lowercase UUID (8-4-4-4-12 hex digits).
+      schema:
+        type: string
+        format: uuid
+        example: 3f2b8c1e-5d4a-4b6e-9f7a-1c2d3e4f5a6b
+  schemas:
+    Person:
+      type: object
+      required: [id, name, birthdate]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Auto-generated UUID.
+          example: 3f2b8c1e-5d4a-4b6e-9f7a-1c2d3e4f5a6b
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: Ada Lovelace
+        birthdate:
+          type: string
+          format: date
+          description: Calendar date between 1900-01-01 and 2999-12-31.
+          example: "1815-12-10"
+    NewPerson:
+      type: object
+      required: [name, birthdate]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Trimmed before validation; must be 1 to 200 characters after trimming.
+          example: Ada Lovelace
+        birthdate:
+          type: string
+          format: date
+          description: Real calendar date (no 2023-02-29), year 1900 to 2999.
+          example: "1815-12-10"
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: not found
+  responses:
+    BadRequest:
+      description: Malformed JSON, invalid field, invalid id, or invalid query parameter
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Unknown path, or no person with the given id
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: not found
+    MethodNotAllowed:
+      description: Known path used with an unsupported method
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: method not allowed
+    PayloadTooLarge:
+      description: Request too large
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Database failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: internal error
