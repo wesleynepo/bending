@@ -11,6 +11,28 @@ A Redis client and a small HTTP server, written in [Bend](https://bend-lang.com)
 
 Limits: ASCII keys/values, replies up to 64KB, no array replies, no AUTH/TLS.
 
+## JSON (`json/`)
+
+Build, encode, parse and query JSON without hand-writing strings:
+
+```python
+import ./json/json.bend as Json
+
+Json.encode(Json.object([
+  Json.field("name", Json.str("x\"y")),
+  Json.field("tags", Json.array([Json.u32(1), Json.bool(True{}), Json.null()]))]))
+# {"name":"x\"y","tags":[1,true,null]}
+
+Json.parse("{\"a\": [1, 2]}")      # Some{...}; None{} if malformed
+Json.get(obj, "a")                 # Maybe<Json> member lookup
+Json.at(arr, 0n)                   # Maybe<Json> element lookup
+Json.as_str(j)                     # Maybe<String>
+```
+
+Numbers are kept as their source text, `\uXXXX` escapes decode to a single char
+(surrogate pairs are not combined), and trailing commas or trailing garbage are
+rejected. `json/LAWS.bend` / `json/PROOF.bend` hold the laws (`bend json/PROOF.bend`).
+
 ## HTTP server (`server.bend`)
 
 `GET /<key>` looks the key up in Redis and answers JSON:

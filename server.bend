@@ -1,6 +1,7 @@
 import Base
 import ./redis/client.bend as Redis
 import ./redis/resp.bend as Resp
+import ./json/json.bend as Json
 
 # HTTP -> Redis bridge: GET /<key> looks <key> up in Redis and answers JSON.
 #
@@ -38,36 +39,21 @@ def http(status: String, +body: String) -> String:
   "HTTP/1.1 " ++ status ++ "\r\nContent-Type: application/json\r\nContent-Length: "
     ++ Nat.show(String.length(body)) ++ "\r\nConnection: close\r\n\r\n" ++ body
 
-def esc.go(q: Bool, bs: Bool, h: Char, rest: String) -> String:
-  match q:
-    case True{}:
-      "\\\"" ++ rest
-    case False{}:
-      match bs:
-        case True{}:
-          "\\\\" ++ rest
-        case False{}:
-          SCon{h, rest}
-
-def esc(s: String) -> String:
-  match s:
-    case SNil{}:
-      ""
-    case SCon{+h, t}:
-      esc.go(Char.is_eq(h, '"'), Char.is_eq(h, '\\'), h, esc(t))
+def error(msg: String) -> Json.Json:
+  Json.object([Json.field("error", Json.str(msg))])
 
 def render(+key: String, r: Result<&1, &1, String, Resp.Reply>) -> String:
   match r:
     case Fail{e}:
-      http("502 Bad Gateway", "{\"error\":\"redis unavailable\"}")
+      http("502 Bad Gateway", Json.encode(error("redis unavailable")))
     case Done{reply}:
       match reply:
         case Resp.Bulk{v}:
-          http("200 OK", "{\"key\":\"" ++ esc(key) ++ "\",\"value\":\"" ++ esc(v) ++ "\"}")
+          http("200 OK", Json.encode(Json.object([Json.field("key", Json.str(key)), Json.field("value", Json.str(v))])))
         case Resp.Null{}:
-          http("404 Not Found", "{\"error\":\"not found\"}")
+          http("404 Not Found", Json.encode(error("not found")))
         case _:
-          http("502 Bad Gateway", "{\"error\":\"unexpected redis reply\"}")
+          http("502 Bad Gateway", Json.encode(error("unexpected redis reply")))
 
 # --- request handling -------------------------------------------------------
 
@@ -118,7 +104,7 @@ def fetch(rh: String, rp: U32, key: String) -> IO(Result<&1, &1, String, Resp.Re
 def route(rh: String, rp: U32, s: Socket, +key: String, empty: Bool) -> IO(Unit):
   match empty:
     case True{}:
-      send_close(s, http("400 Bad Request", "{\"error\":\"missing key\"}"))
+      send_close(s, http("400 Bad Request", Json.encode(error("missing key"))))
     case False{}:
       do IO<Unit>:
         res : Result<&1, &1, String, Resp.Reply> <- fetch(rh, rp, key)
